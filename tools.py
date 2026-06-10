@@ -10,41 +10,85 @@ from ddgs import DDGS
 # ============================================================
 # 工具 1：本地数据库查询（保留）
 # ============================================================
-DATA_PATH = "data/scores.csv"
-df = pd.read_csv(DATA_PATH)
+DATA_PATH = "data/scores_detail.csv"
+df = pd.read_csv(DATA_PATH, dtype={"最低位次": str})  # 位次用字符串避免 NaN
 
 
 @tool
 def query_admission_score(query: str) -> str:
     """
-    查询本地数据库中的大学录取分数线（181所大学，13省，2021-2023年数据）。
+    查询本地数据库中的大学专业级录取分数线。
 
-    支持按大学名称、省份、年份、文理科组合查询。
-    例如："浙江大学2023年浙江理科分数线"、"上海复旦大学文科最低分"。
+    数据库：48所重点大学 × 10省 × 2024+2023年，含真实专业名称和位次。
+    支持按大学、省份、年份、文理科、专业组合查询。
+    例如："浙大计算机2024浙江"、"清华电子信息理科"。
 
     当用户问到分数线、录取分数、位次时优先使用本工具。
 
     参数 query: 用户的查询描述"""
     result = df.copy()
 
-    # 按大学名称筛选（181所大学全量匹配）
+    # 按大学名称筛选（支持全名和简称）
+    # 常用简称映射
+    SHORT_NAMES = {
+        "浙大": "浙江大学", "北大": "北京大学", "清华": "清华大学",
+        "复旦": "复旦大学", "上交": "上海交通大学", "南大": "南京大学",
+        "中科大": "中国科学技术大学", "哈工大": "哈尔滨工业大学",
+        "西交": "西安交通大学", "人大": "中国人民大学", "同济": "同济大学",
+        "武大": "武汉大学", "华科": "华中科技大学", "中大": "中山大学",
+        "厦大": "厦门大学", "南开": "南开大学", "天大": "天津大学",
+        "东南": "东南大学", "北航": "北京航空航天大学", "北理工": "北京理工大学",
+        "华师大": "华东师范大学", "川大": "四川大学", "电子科大": "电子科技大学",
+        "山大": "山东大学", "吉大": "吉林大学", "中南": "中南大学",
+        "湖大": "湖南大学", "大工": "大连理工大学", "西工大": "西北工业大学",
+    }
     universities = df["大学"].unique()
-    matched_univ = [u for u in universities if u in query]
-    if matched_univ:
-        result = result[result["大学"].isin(matched_univ)]
+    # 先查简称映射
+    query_univs = set()
+    for short, full in SHORT_NAMES.items():
+        if short in query and full in universities:
+            query_univs.add(full)
+    # 再查全名
+    for u in universities:
+        if u in query:
+            query_univs.add(u)
+    if query_univs:
+        result = result[result["大学"].isin(query_univs)]
 
     # 按省份筛选
-    provinces = df["省份"].unique()
-    for p in provinces:
+    for p in df["省份"].unique():
         if p in query:
             result = result[result["省份"] == p]
             break
 
     # 按文理科筛选
     if "理科" in query:
-        result = result[result["批次"].str.contains("理科", case=False)]
+        result = result[result["文理科"] == "理科"]
     elif "文科" in query:
-        result = result[result["批次"].str.contains("文科", case=False)]
+        result = result[result["文理科"] == "文科"]
+
+    # 按专业筛选（模糊匹配），找不到则保留全部
+    major_filters = {
+        "计算机": "计算机|软件|人工智能|信息|数据|图灵",
+        "软件": "软件|计算机",
+        "电子": "电子|通信|集成电路|微电子",
+        "医学": "医|临床|药学|护理",
+        "金融": "金融|经济|财政|会计",
+        "机械": "机械|车辆|制造",
+        "土木": "土木|建筑|城规",
+        "电气": "电气|自动化|能源",
+        "法学": "法学|法律|知识产权",
+        "数学": "数学|统计",
+        "物理": "物理|应用物理",
+        "化学": "化学|化工|材料",
+        "生物": "生物|生医|生命",
+    }
+    for keyword, pattern in major_filters.items():
+        if keyword in query:
+            filtered = result[result["专业"].str.contains(pattern, case=False, na=False)]
+            if len(filtered) > 0:  # 找到了才筛选，没找到保留全部
+                result = filtered
+            break
 
     # 按年份筛选
     years = sorted(df["年份"].unique(), reverse=True)
@@ -56,20 +100,23 @@ def query_admission_score(query: str) -> str:
         result = result[result["年份"] == years[0]]
 
     if result.empty:
-        # 给出前8所大学名作为参考
         sample = ", ".join(sorted(universities)[:8])
         return (
             f"本地数据库未找到匹配数据。"
-            f"数据库覆盖 181 所大学，包括：{sample}等。"
-            f"请检查大学名称是否正确，或使用 web_search 工具联网搜索。"
+            f"数据库覆盖的大学包括：{sample}等48所。"
+            f"请检查名称是否正确，或使用 web_search 工具联网搜索。"
         )
 
+    # 格式化输出（最多20条，避免太长）
     lines = []
-    for _, row in result.iterrows():
+    for _, row in result.head(20).iterrows():
+        rank_str = f"位次: {row['最低位次']}" if str(row['最低位次']).strip() else ""
         lines.append(
-            f"{row['大学']} | {row['年份']}年 | {row['批次']} | "
-            f"最低分: {row['最低分']} | 位次: {row['最低位次']} | {row['省份']}"
+            f"{row['大学']} | {row['专业']} | {row['年份']}年 | {row['文理科']} | "
+            f"最低分: {row['最低分']} | {rank_str} | {row['省份']}"
         )
+    if len(result) > 20:
+        lines.append(f"...（共{len(result)}条，仅显示前20条）")
     return "\n".join(lines)
 
 
