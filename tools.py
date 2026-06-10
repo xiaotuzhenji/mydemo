@@ -254,6 +254,154 @@ def check_employment(university: str, major: str = "") -> str:
 
 
 # ============================================================
+# 工具 5：掌上高考实时查询（新）
+# ============================================================
+# 缓存学校列表（启动时加载一次）
+_school_cache = None
+
+def _get_school_list() -> dict:
+    """获取学校名 → ID 映射"""
+    global _school_cache
+    if _school_cache is not None:
+        return _school_cache
+
+    try:
+        import requests as _r
+        url = "https://static-data.gaokao.cn/www/2.0/info/linkage.json"
+        headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.gaokao.cn/"}
+        data = _r.get(url, headers=headers, timeout=30).json()
+        schools = data.get("data", {}).get("school", [])
+        _school_cache = {}
+        for s in schools:
+            name = s.get("name", "")
+            sid = s.get("school_id", "")
+            if name and sid:
+                _school_cache[name] = str(sid)
+        return _school_cache
+    except Exception:
+        return {}
+
+
+# 省份编码
+_PROVINCE_CODE = {
+    "北京":11,"天津":12,"河北":13,"山西":14,"内蒙古":15,
+    "辽宁":21,"吉林":22,"黑龙江":23,"上海":31,"江苏":32,
+    "浙江":33,"安徽":34,"福建":35,"江西":36,"山东":37,
+    "河南":41,"湖北":42,"湖南":43,"广东":44,"广西":45,
+    "海南":46,"重庆":50,"四川":51,"贵州":52,"云南":53,
+    "陕西":61,"甘肃":62,"青海":63,"宁夏":64,"新疆":65,
+}
+
+
+@tool
+def query_live_score(query: str) -> str:
+    """
+    实时查询掌上高考官方 API 的专业级录取数据。
+
+    支持近3000所大学，覆盖全国31省，2024+2023年最新数据。
+    适用场景：
+    - 本地数据库中没有的大学或省份
+    - 需要最新、最全的专业级数据
+    - 查特定专业的录取情况
+
+    查询时请尽量提供大学名称、省份、年份。
+    例如："四川大学四川2024"、"深圳大学广东计算机"
+
+    参数 query: 查询描述，需包含大学名、省份、年份
+    """
+    try:
+        import requests as _r
+        import re as _re
+
+        school_map = _get_school_list()
+        if not school_map:
+            return "学校列表加载失败，请稍后重试。"
+
+        # 解析查询：提取大学名
+        school_name = None
+        # 先查简称
+        _short = {"浙大":"浙江大学","北大":"北京大学","清华":"清华大学",
+                  "复旦":"复旦大学","上交":"上海交通大学","南大":"南京大学",
+                  "中科大":"中国科学技术大学","哈工大":"哈尔滨工业大学",
+                  "西交":"西安交通大学","人大":"中国人民大学","同济":"同济大学",
+                  "武大":"武汉大学","华科":"华中科技大学","中大":"中山大学",
+                  "厦大":"厦门大学","南开":"南开大学","天大":"天津大学",
+                  "东南":"东南大学","北航":"北京航空航天大学","北理工":"北京理工大学",
+                  "华师大":"华东师范大学","川大":"四川大学","电子科大":"电子科技大学",
+                  "山大":"山东大学","吉大":"吉林大学","中南":"中南大学",
+                  "湖大":"湖南大学","大工":"大连理工大学","西工大":"西北工业大学",
+                  "深大":"深圳大学","南科大":"南方科技大学","上财":"上海财经大学",
+                  "央财":"中央财经大学","对外经贸":"对外经济贸易大学",
+                  "北邮":"北京邮电大学","西电":"西安电子科技大学",
+                  "北交":"北京交通大学","南航":"南京航空航天大学",
+                  "南理":"南京理工大学","哈工程":"哈尔滨工程大学",
+                  "华理":"华东理工大学","上大":"上海大学"}
+        for short, full in _short.items():
+            if short in query:
+                school_name = full
+                break
+        if not school_name:
+            for name in school_map:
+                if name in query:
+                    school_name = name
+                    break
+
+        if not school_name:
+            return f"未能识别大学名称。请提供完整大学名（如\"四川大学\"）。"
+
+        school_id = school_map.get(school_name)
+        if not school_id:
+            return f"未找到 {school_name} 的学校 ID。请检查名称是否正确。"
+
+        # 解析省份和年份
+        province_id = None
+        for pname, pid in _PROVINCE_CODE.items():
+            if pname in query:
+                province_id = pid
+                province_name = pname
+                break
+        if not province_id:
+            province_id = 33  # 默认浙江
+            province_name = "浙江"
+
+        year = 2024
+        for y in [2024, 2023, 2022, 2021]:
+            if str(y) in query:
+                year = y
+                break
+
+        # 调用 API
+        url = f"https://static-data.gaokao.cn/www/2.0/schoolspecialscore/{school_id}/{year}/{province_id}.json"
+        headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.gaokao.cn/"}
+        resp = _r.get(url, headers=headers, timeout=15)
+        data = resp.json()
+
+        if data.get("code") != "0000":
+            return f"API 返回错误: {data.get('message', '未知错误')}"
+
+        rows = []
+        for gk, gv in data.get("data", {}).items():
+            for item in gv.get("item", []):
+                info = item.get("info", "")
+                m = _re.search(r"[（(](.+?)[，,)）]", info)
+                major = m.group(1) if m else (info[:25] if info else "-")
+                score = item.get("min", "")
+                rank = item.get("min_section", "")
+                subject = "理科" if item.get("type") == "1" else "文科"
+
+                if score and str(score).replace(".", "").isdigit():
+                    rows.append(f"{school_name} | {major} | {year}年 | {subject} | 最低分: {int(float(score))} | 位次: {rank} | {province_name}")
+
+        if not rows:
+            return f"{school_name} 在 {province_name} {year}年暂无录取数据。"
+
+        return "\n".join(rows[:30])  # 最多返回30条
+
+    except Exception as e:
+        return f"实时查询失败: {e}。请尝试使用 query_admission_score 或 web_search。"
+
+
+# ============================================================
 # 工具列表
 # ============================================================
-TOOLS = [query_admission_score, web_search, query_knowledge_base, check_employment]
+TOOLS = [query_admission_score, web_search, query_knowledge_base, check_employment, query_live_score]

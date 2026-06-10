@@ -173,11 +173,18 @@ no_profile_rule = (
 
 SYSTEM_PROMPT = f"""你是高考志愿填报助手。{profile_text}
 
-你有四个工具：
-1. query_admission_score: 查48所重点大学的专业级分数线（2024+2023，含位次）
-2. web_search: 联网搜索最新招生政策、专业前景、行业趋势
-3. query_knowledge_base: 查概念解释、填报策略、专业介绍
-4. check_employment: 查大学毕业生真实就业去向、雇主、500强招聘情况
+你有五个工具：
+1. query_admission_score: 查48所重点大学的本地专业级分数线（2024+2023，含位次）
+2. query_live_score: 实时查近3000所大学的专业级分数线（掌上高考API）
+3. web_search: 联网搜索最新招生政策、专业前景、行业趋势
+4. query_knowledge_base: 查概念解释、填报策略、专业介绍
+5. check_employment: 查大学毕业生真实就业去向、雇主、500强招聘情况
+
+工具选择：
+- 分数线/位次 → 优先 query_admission_score，没有的用 query_live_score
+- 概念/策略/专业介绍 → query_knowledge_base
+- 最新政策/实时信息 → web_search
+- 就业去向/雇主 → check_employment
 
 == 核心工作原则 ==
 
