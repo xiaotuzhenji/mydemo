@@ -96,8 +96,17 @@ def build_vectorstore(force_rebuild: bool = False) -> Chroma:
     embedding = get_embedding()
 
     if force_rebuild and os.path.exists(CHROMA_DIR):
-        shutil.rmtree(CHROMA_DIR)
-        print("已删除旧知识库")
+        # 不能用 rmtree（Docker 挂载的目录会报 Device busy）
+        import glob as _glob
+        for f in _glob.glob(f"{CHROMA_DIR}/*"):
+            try:
+                if os.path.isdir(f):
+                    shutil.rmtree(f, ignore_errors=True)
+                else:
+                    os.remove(f)
+            except OSError:
+                pass
+        print("已清空旧知识库")
 
     if os.path.exists(CHROMA_DIR) and os.listdir(CHROMA_DIR):
         print(f"加载已有知识库: {CHROMA_DIR}")
