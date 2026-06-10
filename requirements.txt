@@ -1,0 +1,23 @@
+# ===== LLM Core =====
+# DeepSeek uses OpenAI-compatible API, so langchain-openai works with custom base_url
+langchain>=0.3.0
+langchain-openai>=0.3.0
+langchain-community>=0.3.0
+
+# ===== Vector Database =====
+chromadb>=0.5.0
+
+# ===== Config Management =====
+python-dotenv>=1.0.0
+
+# ===== Prototype UI =====
+streamlit>=1.30.0
+
+# ===== Document Loading (PDF policies, web pages, etc.) =====
+pypdf>=4.0.0
+
+# ===== Web Search =====
+ddgs>=9.0.0
+
+# ===== Data Processing =====
+pandas>=2.0.0

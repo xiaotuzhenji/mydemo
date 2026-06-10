@@ -1,0 +1,29 @@
+# === Python ===
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# === 敏感配置 ===
+.env
+
+# === 数据库 & 向量库 ===
+chroma_db/
+chats/
+
+# === 导出文件 ===
+exports/
+
+# === 临时文件 ===
+generate_pdf.py
+temp_data/
+
+# === IDE ===
+.vscode/
+.idea/
+
+# === OS ===
+.DS_Store
+Thumbs.db
