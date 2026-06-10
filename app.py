@@ -120,18 +120,33 @@ for key, default in [
 with st.sidebar:
     st.title("🎓 高考志愿助手")
 
-    with st.expander("📋 我的信息", expanded=not st.session_state.profile_set):
+    # ---- 用户画像 ----
+    if st.session_state.get("profile_set"):
+        st.success(f"📍 {st.session_state.get('profile_province','')} | "
+                   f"{st.session_state.get('profile_score','')}分 | "
+                   f"{st.session_state.get('profile_subject','')}")
+        st.caption(f"🏙 {st.session_state.get('profile_city','不限')}")
+        if st.button("✏ 修改信息", use_container_width=True):
+            st.session_state.profile_set = False
+            st.rerun()
+    else:
+        st.warning("👆 先填信息，再问问题")
         province = st.selectbox("省份", ["浙江","北京","上海","广东","江苏","四川","山东",
                                           "湖北","湖南","河北","河南","天津","陕西","其他"])
         score = st.number_input("分数/预估分", 0, 750, 600, step=5)
         subject = st.selectbox("选科", ["理科/物理类","文科/历史类","综合/不分科"])
         city = st.text_input("意向城市（选填）", placeholder="如：杭州、上海")
-        if st.button("保存信息", use_container_width=True):
+        if st.button("💾 保存，开始咨询", use_container_width=True):
             st.session_state.profile_set = True
-            st.session_state.user_profile = f"""
-考生信息：{province}考生，{subject}，预估{score}分。意向城市：{city or '不限'}。
-回答时请结合考生信息给出针对性建议。"""
-            st.success("已保存")
+            st.session_state.profile_province = province
+            st.session_state.profile_score = score
+            st.session_state.profile_subject = subject
+            st.session_state.profile_city = city or "不限"
+            st.session_state.user_profile = (
+                f"【重要】用户是{province}考生，{subject}，预估{score}分，意向城市：{city or '不限'}。"
+                f"所有推荐和建议必须基于此考生信息，不要说'如果你是什么省份'这种假设性的话。"
+            )
+            st.rerun()
 
     st.divider()
 
