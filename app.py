@@ -1,5 +1,5 @@
 """
-高考志愿填报助手 - Demo（流式输出）
+高考志愿填报助手 - Demo（流式输出 + 实时步骤提示）
 运行：.venv\Scripts\streamlit run app.py
 """
 import os, json, glob
@@ -23,16 +23,11 @@ st.set_page_config(page_title="高考志愿填报助手", page_icon="🎓", layo
 # 1. 流式回调处理器
 # ============================================================
 class StreamHandler(BaseCallbackHandler):
-    """捕获 LLM 输出的每个 token，实时显示到 Streamlit"""
-
     def __init__(self, container, initial_text=""):
         self.container = container
         self.text = initial_text
-        self.first_token = False
 
     def on_llm_new_token(self, token: str, **kwargs):
-        if not self.first_token:
-            self.first_token = True
         self.text += token
         self.container.markdown(self.text + " ▌")
 
@@ -89,7 +84,7 @@ def new_chat_filepath():
     return f"{CHATS_DIR}/{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
 # ============================================================
-# 3. 初始化 Agent（LLM 开启流式）
+# 3. 初始化 Agent
 # ============================================================
 @st.cache_resource
 def get_agent():
@@ -98,7 +93,7 @@ def get_agent():
         api_key=os.getenv("DEEPSEEK_API_KEY"),
         base_url=os.getenv("DEEPSEEK_BASE_URL"),
         temperature=0.3,
-        streaming=True,  # ← 开启流式输出
+        streaming=True,
     )
     return create_agent(model=llm, tools=TOOLS, system_prompt="")
 
@@ -120,7 +115,6 @@ for key, default in [
 with st.sidebar:
     st.title("🎓 高考志愿助手")
 
-    # ---- 用户画像 ----
     if st.session_state.get("profile_set"):
         st.success(f"📍 {st.session_state.get('profile_province','')} | "
                    f"{st.session_state.get('profile_score','')}分 | "
@@ -231,7 +225,7 @@ if not st.session_state.get("profile_set"):
 # 7. 主区域
 # ============================================================
 st.title("🎓 高考志愿填报助手")
-st.caption("181所大学 · 13省数据 · AI驱动 · 实时联网 · 流式输出")
+st.caption("48所本地 + 3000所实时 · 专业级分数线 · 流式交互")
 
 # 首次加载
 if not st.session_state.chat_loaded:
@@ -283,30 +277,38 @@ if user_input:
     st.session_state.messages.append(HumanMessage(content=user_input))
 
     with st.chat_message("assistant", avatar="🎓"):
-        # 创建一个占位容器，流式写入
-        placeholder = st.empty()
-        stream_handler = StreamHandler(placeholder)
+        status_placeholder = st.empty()
+        content_placeholder = st.empty()
+        stream_handler = StreamHandler(content_placeholder)
 
         try:
             full_messages = [HumanMessage(content=f"[系统指令]\n{SYSTEM_PROMPT}")]
             full_messages.extend(st.session_state.messages)
-
-            # invoke + callbacks 实现流式输出
-            result = agent_graph.invoke(
-                {"messages": full_messages},
-                config={"callbacks": [stream_handler]},
-            )
-
-            # 确保最终文本写入
             final_answer = ""
-            for m in reversed(result["messages"]):
-                if isinstance(m, AIMessage) and m.content:
-                    final_answer = m.content
-                    break
 
-            # 如果流式没触发（比如只有工具调用），fallback 显示最终答案
-            if not stream_handler.first_token:
-                placeholder.markdown(final_answer)
+            # 流式执行，实时显示步骤
+            status_text = status_placeholder.info("🤔 分析问题...")
+            for chunk in agent_graph.stream(
+                {"messages": full_messages},
+                {"callbacks": [stream_handler]},
+                stream_mode="updates",
+            ):
+                node_name = list(chunk.keys())[0] if chunk else ""
+                if node_name == "tools":
+                    status_text.info("🔧 正在查询数据...")
+                elif node_name == "model":
+                    status_text.info("📝 整理回答...")
+            status_text.empty()
+
+            # 取最终回答
+            if stream_handler.text:
+                final_answer = stream_handler.text
+            else:
+                for m in reversed(full_messages):
+                    if isinstance(m, AIMessage) and m.content:
+                        final_answer = m.content
+                        break
+                content_placeholder.markdown(final_answer)
 
             st.session_state.messages.append(AIMessage(content=final_answer))
 
