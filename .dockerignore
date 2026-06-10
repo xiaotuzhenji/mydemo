@@ -1,0 +1,15 @@
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.env
+.env.example
+.DS_Store
+Thumbs.db
+exports
+generate_pdf.py
+chroma_db
+chats
+README.md
+LICENSE

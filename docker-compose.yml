@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: gaokao-assistant
+    ports:
+      - "8501:8501"
+    environment:
+      # 从 .env 文件读取（部署前把 .env.example 改成 .env 并填入真实 Key）
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+    volumes:
+      # 持久化：向量库和对话历史不随容器重启丢失
+      - ./chroma_db:/app/chroma_db
+      - ./chats:/app/chats
+    restart: unless-stopped
